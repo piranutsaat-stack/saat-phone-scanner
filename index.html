@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SAAT — Scan barcode</title>
+  <style>
+    :root {font:18px system-ui,sans-serif;color:#18332b;background:#f4f7f5}
+    * {box-sizing:border-box}
+    body {margin:0}
+    main {max-width:640px;margin:auto;padding:24px 16px 44px}
+    h1 {font-size:27px;margin:0 0 8px}
+    p {line-height:1.45}
+    .muted {color:#53675f;font-size:15px}
+    .card {background:#fff;border:1px solid #d7e2dc;border-radius:16px;padding:20px;margin-top:20px}
+    button,input {font:inherit;border:1px solid #bfcfc6;border-radius:10px;padding:14px;min-height:52px}
+    button {width:100%;font-weight:700;background:#176b52;color:#fff;border-color:#176b52;cursor:pointer}
+    button.secondary {background:#fff;color:#176b52;margin-top:10px}
+    input {width:100%;margin:8px 0 12px}
+    video {width:100%;max-height:52vh;background:#111;border-radius:12px;object-fit:contain}
+    #status {min-height:24px}
+    #status.error {color:#aa2929}
+    [hidden] {display:none!important}
+    a {color:#176b52}
+  </style>
+</head>
+<body><main>
+  <h1>SAAT Stock</h1>
+  <p>Scan a product barcode with your phone. The stock page will open automatically.</p>
+  <section class="card">
+    <button id="start" type="button">Start camera scan</button>
+    <div id="cameraView" hidden>
+      <p class="muted">Point the camera at the full barcode and hold still.</p>
+      <video id="preview" autoplay muted playsinline></video>
+      <button id="cancel" class="secondary" type="button">Cancel scan</button>
+    </div>
+    <p id="status" role="status" aria-live="polite"></p>
+  </section>
+  <section class="card">
+    <label for="typed">Barcode number, if the camera cannot read it</label>
+    <form id="manual"><input id="typed" autocomplete="off" maxlength="100" required placeholder="Type the number below the bars"><button type="submit">Open item</button></form>
+  </section>
+  <p class="muted"><a href="https://script.google.com/macros/s/AKfycbzm3xQDybCw0KhJCHHC8DJ3QV_lVa69r3VCh68aDsHYpD9AH6lCKxO5KD3Ztl5QR_1a/exec">Open stock without scanning</a></p>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script>
+'use strict';
+const APP_URL='https://script.google.com/macros/s/AKfycbzm3xQDybCw0KhJCHHC8DJ3QV_lVa69r3VCh68aDsHYpD9AH6lCKxO5KD3Ztl5QR_1a/exec';
+const $=id=>document.getElementById(id);
+let reader=null,stream=null,scanNumber=0,scanning=false;
+function status(text,isError=false){$('status').textContent=text;$('status').classList.toggle('error',isError);}
+function stop(){scanNumber++;scanning=false;if(reader){reader.reset();reader=null;}if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}$('preview').srcObject=null;$('cameraView').hidden=true;$('start').hidden=false;}
+function openItem(code){
+  code=code.trim();if(!code||code.length>100){status('Enter a valid barcode.',true);return;}
+  stop();status('Barcode found. Opening stock…');
+  const next=new URL(APP_URL);next.searchParams.set('barcode',code);location.assign(next.href);
+}
+async function start(){
+  if(scanning)return;stop();const scan=scanNumber;scanning=true;$('cameraView').hidden=false;$('start').hidden=true;status('Opening camera…');
+  try{
+    if(!navigator.mediaDevices?.getUserMedia)throw Error('Open this page in Safari or Chrome to use the camera.');
+    if(typeof ZXing==='undefined')throw Error('Scanner library did not load. Check your internet connection and refresh.');
+    const media=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});
+    if(scan!==scanNumber){media.getTracks().forEach(t=>t.stop());return;}
+    stream=media;
+    const hints=new Map();hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.CODE_128,ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E,ZXing.BarcodeFormat.CODE_39,ZXing.BarcodeFormat.ITF]);
+    const current=new ZXing.BrowserMultiFormatReader(hints);current.timeBetweenDecodingAttempts=150;reader=current;
+    let previous='',same=0;status('Hold the full barcode in view.');
+    await current.decodeFromStream(media,$('preview'),result=>{
+      if(scan!==scanNumber||!result)return;
+      const code=result.getText().trim();if(!code)return;
+      same=code===previous?same+1:1;previous=code;
+      if(same>=2)openItem(code);
+    });
+    if(scan!==scanNumber)current.reset();
+  }catch(error){
+    if(scan!==scanNumber)return;
+    stop();
+    status(error.name==='NotAllowedError'?'Camera permission was denied. Allow this scanner site to use the camera, then try again.':error.name==='NotFoundError'?'No camera was found on this device.':error.name==='NotReadableError'?'The camera is busy. Close other camera apps and try again.':error.message||'Could not start the camera.',true);
+  }
+}
+$('start').onclick=start;
+$('cancel').onclick=()=>{stop();status('Scan cancelled.');};
+$('manual').onsubmit=event=>{event.preventDefault();openItem($('typed').value);};
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
+window.addEventListener('pagehide',stop);
+</script></body></html>
