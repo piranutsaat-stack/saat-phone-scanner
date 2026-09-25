@@ -4,6 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>SAAT — Scan barcode</title>
+  <script>
+    // A fresh bookmark has no handoff, so it starts a new PIN sign-in.
+    const handoff=new URL(location.href).searchParams.get('handoff')||'';
+    if(location.search)history.replaceState(null,'',location.pathname+location.hash);
+  </script>
   <style>
     :root {font:18px system-ui,sans-serif;color:#18332b;background:#f4f7f5}
     * {box-sizing:border-box}
@@ -40,7 +45,7 @@
     <label for="typed">Barcode number, if the camera cannot read it</label>
     <form id="manual"><input id="typed" autocomplete="off" maxlength="100" required placeholder="Type the number below the bars"><button type="submit">Open item</button></form>
   </section>
-  <p class="muted"><a href="https://script.google.com/macros/s/AKfycbzm3xQDybCw0KhJCHHC8DJ3QV_lVa69r3VCh68aDsHYpD9AH6lCKxO5KD3Ztl5QR_1a/exec">Open stock without scanning</a></p>
+  <p class="muted"><a id="openStock" href="https://script.google.com/macros/s/AKfycbzm3xQDybCw0KhJCHHC8DJ3QV_lVa69r3VCh68aDsHYpD9AH6lCKxO5KD3Ztl5QR_1a/exec">Open stock without scanning</a></p>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script>
@@ -53,7 +58,7 @@ function stop(){scanNumber++;scanning=false;if(reader){reader.reset();reader=nul
 function openItem(code){
   code=code.trim();if(!code||code.length>100){status('Enter a valid barcode.',true);return;}
   stop();status('Barcode found. Opening stock…');
-  const next=new URL(APP_URL);next.searchParams.set('barcode',code);location.assign(next.href);
+  const next=new URL(APP_URL);next.searchParams.set('barcode',code);if(/^[a-f0-9]{64}$/.test(handoff))next.searchParams.set('handoff',handoff);location.assign(next.href);
 }
 async function start(){
   if(scanning)return;stop();const scan=scanNumber;scanning=true;$('cameraView').hidden=false;$('start').hidden=true;status('Opening camera…');
@@ -80,6 +85,7 @@ async function start(){
   }
 }
 $('start').onclick=start;
+$('openStock').href=APP_URL+(/^[a-f0-9]{64}$/.test(handoff)?'?handoff='+encodeURIComponent(handoff):'');
 $('cancel').onclick=()=>{stop();status('Scan cancelled.');};
 $('manual').onsubmit=event=>{event.preventDefault();openItem($('typed').value);};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
