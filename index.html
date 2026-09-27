@@ -6,7 +6,9 @@
   <title>SAAT — Scan barcode</title>
   <script>
     // A fresh bookmark has no handoff, so it starts a new PIN sign-in.
-    const handoff=new URL(location.href).searchParams.get('handoff')||'';
+    const params=new URL(location.href).searchParams;
+    const handoff=params.get('handoff')||'';
+    const incomingLanguage=params.get('lang')||'';
     if(location.search)history.replaceState(null,'',location.pathname+location.hash);
   </script>
   <style>
@@ -15,6 +17,8 @@
     body {margin:0}
     main {max-width:640px;margin:auto;padding:24px 16px 44px}
     h1 {font-size:27px;margin:0 0 8px}
+    .top {display:flex;justify-content:space-between;align-items:center;gap:12px}
+    #languageToggle {width:auto;min-height:40px;padding:7px 12px;background:#e5f3e9;color:#176b52;border-color:#cde3d5;font-size:14px}
     p {line-height:1.45}
     .muted {color:#53675f;font-size:15px}
     .card {background:#fff;border:1px solid #d7e2dc;border-radius:16px;padding:20px;margin-top:20px}
@@ -30,7 +34,7 @@
   </style>
 </head>
 <body><main>
-  <h1>SAAT Stock</h1>
+  <div class="top"><h1>SAAT Stock</h1><button id="languageToggle" type="button" aria-label="Switch language">ខ្មែរ</button></div>
   <p>Scan a product barcode with your phone. The stock page will open automatically.</p>
   <section class="card">
     <button id="start" type="button">Start camera scan</button>
@@ -52,13 +56,19 @@
 'use strict';
 const APP_URL='https://script.google.com/macros/s/AKfycbzm3xQDybCw0KhJCHHC8DJ3QV_lVa69r3VCh68aDsHYpD9AH6lCKxO5KD3Ztl5QR_1a/exec';
 const $=id=>document.getElementById(id);
+const KM={'Scan a product barcode with your phone. The stock page will open automatically.':'ស្កេនបាកូដទំនិញ។ ទំព័រស្តុកនឹងបើកដោយស្វ័យប្រវត្តិ','Start camera scan':'បើកកាមេរ៉ាស្កេន','Point the camera at the full barcode and hold still.':'តម្រង់កាមេរ៉ាទៅលើបាកូដទាំងមូល ហើយទុកឱ្យនឹង','Cancel scan':'បោះបង់','Barcode number, if the camera cannot read it':'លេខបាកូដ ប្រសិនបើកាមេរ៉ាអានមិនបាន','Type the number below the bars':'វាយលេខក្រោមបន្ទាត់បាកូដ','Open item':'បើកទំនិញ','Open stock without scanning':'បើកស្តុកដោយមិនស្កេន','Switch language':'ប្តូរភាសា','Enter a valid barcode.':'បញ្ចូលបាកូដឱ្យត្រឹមត្រូវ','Barcode found. Opening stock…':'រកឃើញបាកូដ។ កំពុងបើកស្តុក…','Opening camera…':'កំពុងបើកកាមេរ៉ា…','Hold the full barcode in view.':'តម្រង់បាកូដទាំងមូលក្នុងកាមេរ៉ា','Open this page in Safari or Chrome to use the camera.':'សូមបើកទំព័រនេះក្នុង Safari ឬ Chrome ដើម្បីប្រើកាមេរ៉ា','Scanner library did not load. Check your internet connection and refresh.':'មិនអាចផ្ទុកកម្មវិធីស្កេនបាន។ សូមពិនិត្យអ៊ីនធឺណិត ហើយផ្ទុកឡើងវិញ','Camera permission was denied. Allow this scanner site to use the camera, then try again.':'កាមេរ៉ាត្រូវបានបដិសេធ។ អនុញ្ញាតកាមេរ៉ាសម្រាប់ទំព័រនេះ រួចសាកល្បងម្តងទៀត','No camera was found on this device.':'រកមិនឃើញកាមេរ៉ាលើឧបករណ៍នេះ','The camera is busy. Close other camera apps and try again.':'កាមេរ៉ាកំពុងប្រើ។ បិទកម្មវិធីកាមេរ៉ាផ្សេង រួចសាកល្បងម្តងទៀត','Could not start the camera.':'មិនអាចបើកកាមេរ៉ាបាន','Scan cancelled.':'បានបោះបង់ការស្កេន'};
+let language='en';const originalText=new WeakMap();
+function tr(text){return language==='km'&&KM[text]?KM[text]:text;}
+function setLanguage(next){language=next==='km'?'km':'en';document.documentElement.lang=language;try{localStorage.setItem('saat-language',language);}catch(e){}$('languageToggle').textContent=language==='km'?'English':'ខ្មែរ';const walker=document.createTreeWalker(document.querySelector('main'),NodeFilter.SHOW_TEXT);let node;while((node=walker.nextNode())){const source=originalText.get(node)??node.nodeValue,trimmed=source.trim();if(!KM[trimmed])continue;if(!originalText.has(node))originalText.set(node,source);node.nodeValue=source.replace(trimmed,tr(trimmed));}const field=$('typed'),english=field.dataset.enPlaceholder||field.placeholder;field.dataset.enPlaceholder=english;field.placeholder=tr(english);$('languageToggle').setAttribute('aria-label',tr('Switch language'));if($('status').dataset.english)$('status').textContent=tr($('status').dataset.english);}
+function savedLanguage(){try{return localStorage.getItem('saat-language')||'en';}catch(e){return 'en';}}
+function stockLink(){const next=new URL(APP_URL);if(/^[a-f0-9]{64}$/.test(handoff))next.searchParams.set('handoff',handoff);next.searchParams.set('lang',language);return next.href;}
 let reader=null,stream=null,scanNumber=0,scanning=false;
-function status(text,isError=false){$('status').textContent=text;$('status').classList.toggle('error',isError);}
+function status(text,isError=false){$('status').dataset.english=text;$('status').textContent=tr(text);$('status').classList.toggle('error',isError);}
 function stop(){scanNumber++;scanning=false;if(reader){reader.reset();reader=null;}if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}$('preview').srcObject=null;$('cameraView').hidden=true;$('start').hidden=false;}
 function openItem(code){
   code=code.trim();if(!code||code.length>100){status('Enter a valid barcode.',true);return;}
   stop();status('Barcode found. Opening stock…');
-  const next=new URL(APP_URL);next.searchParams.set('barcode',code);if(/^[a-f0-9]{64}$/.test(handoff))next.searchParams.set('handoff',handoff);location.assign(next.href);
+  const next=new URL(stockLink());next.searchParams.set('barcode',code);location.assign(next.href);
 }
 async function start(){
   if(scanning)return;stop();const scan=scanNumber;scanning=true;$('cameraView').hidden=false;$('start').hidden=true;status('Opening camera…');
@@ -85,7 +95,9 @@ async function start(){
   }
 }
 $('start').onclick=start;
-$('openStock').href=APP_URL+(/^[a-f0-9]{64}$/.test(handoff)?'?handoff='+encodeURIComponent(handoff):'');
+$('languageToggle').onclick=()=>{setLanguage(language==='en'?'km':'en');$('openStock').href=stockLink();};
+setLanguage(/^(en|km)$/.test(incomingLanguage)?incomingLanguage:savedLanguage());
+$('openStock').href=stockLink();
 $('cancel').onclick=()=>{stop();status('Scan cancelled.');};
 $('manual').onsubmit=event=>{event.preventDefault();openItem($('typed').value);};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
